@@ -1,0 +1,852 @@
+swagger: "2.0"
+
+info:
+  version: "0.1"
+  title: Pier One API
+  description: Docker Registry
+
+basePath: /
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+
+definitions:
+  ScmSourceInformation:
+    type: object
+    properties:
+      url:
+        type: string
+        example: "git:git@github.com:zalando-stups/pierone.git"
+      revision:
+        type: string
+        example: cd768599e1bb41c38279c26254feff5cf57bf967
+      author:
+        type: string
+        example: hjacobs
+      status:
+        type: string
+        example: ""
+  TagSummary:
+    type: object
+    properties:
+      name:
+        type: string
+        example: "1.0"
+      created:
+        type: string
+        example: 2015-05-07T15:49:51.230+0200
+      created_by:
+        type: string
+        example: hjacobs
+      image:
+        type: string
+      clair_id:
+        type: string
+      severity_fix_available:
+        type: string
+      severity_no_fix_available:
+        type: string
+  TagInformation:
+    type: object
+    properties:
+      name:
+        type: string
+        example: "1.0"
+      artifact:
+        type: string
+        example: pierone
+      team:
+        type: string
+        example: stups
+  TeamStatistic:
+    type: object
+    properties:
+      artifacts:
+        type: integer
+      tags:
+        type: integer
+  TeamStatistics:
+    type: object
+    properties:
+      team:
+        type: string
+        example: stups
+      stats:
+        $ref: "#/definitions/TeamStatistic"
+  OverallStatistics:
+    type: object
+    properties:
+      teams:
+        type: integer
+      storage:
+        type: integer
+
+parameters:
+  team:
+    name: team
+    in: path
+    type: string
+    required: true
+  artifact:
+    name: artifact
+    in: path
+    type: string
+    required: true
+  uuid:
+    name: uuid
+    description: Upload UUID as described on https://docs.docker.com/registry/spec/api/#pushing-an-image
+    in: path
+    type: string
+    required: true
+  digest:
+    name: digest
+    description: Layer digest as described on https://docs.docker.com/registry/spec/api/#pushing-an-image
+    in: path
+    type: string
+    required: true
+  name:
+    name: name
+    description: Manifest name
+    in: path
+    type: string
+    required: true
+
+paths:
+
+  '/':
+    get:
+      summary: Application root
+      operationId: org.zalando.stups.friboo.system.http/redirect-to-swagger-ui
+      security:
+        - oauth2: [uid]
+      responses:
+        default:
+          description: "Redirects to /ui/"
+
+  ## Docker Registry API v2
+
+  /v2/:
+    get:
+      summary: check compatibility
+      description: Checks for compatibility with Docker Registry v2.
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/ping
+      responses:
+        "200":
+          description: v2 is available
+  /v2/{team}/{artifact}/blobs/uploads/:
+    post:
+      summary: start upload
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/post-upload
+      security:
+        - oauth2: [uid]
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+      responses:
+        "202":
+          description: upload accepted
+  /v2/{team}/{artifact}/blobs/uploads/{uuid}:
+    patch:
+      summary: upload FS layer blob
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/patch-upload
+      security:
+        - oauth2: [uid]
+      consumes:
+        - application/octet-stream
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/uuid'
+        - name: data
+          in: body
+          schema:
+            description: "binary"
+      responses:
+        "202":
+          description: upload accepted
+    put:
+      summary: upload complete
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/put-upload
+      security:
+        - oauth2: [uid]
+      consumes:
+        - application/octet-stream
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/uuid'
+        - name: digest
+          in: query
+          type: string
+          required: true
+        - name: data
+          in: body
+          schema:
+            description: "binary"
+      responses:
+        "201":
+          description: upload accepted
+  /v2/{team}/{artifact}/blobs/{digest}:
+    head:
+      summary: check layer
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/head-blob
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/digest'
+      responses:
+        "200":
+          description: exists
+        "404":
+          description: FS layer blob does not exist
+    get:
+      summary: get layer
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/get-blob
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/digest'
+      responses:
+        "200":
+          description: exists
+  /v2/{team}/{artifact}/manifests/{name}:
+    put:
+      summary: put manifest
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/put-manifest
+      security:
+        - oauth2: [uid]
+      consumes:
+        - application/octet-stream # Docker sucks
+        - application/json
+        - application/vnd.docker.distribution.manifest.v2+json
+        - application/vnd.docker.distribution.manifest.v1+prettyjws
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/name'
+        - name: data
+          in: body
+          schema:
+            description: "the manifest"
+            type: string
+      responses:
+        "200":
+          description: OK
+    get:
+      summary: get manifest
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/get-manifest
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+        - $ref: '#/parameters/name'
+      responses:
+        "200":
+          description: OK
+  /v2/{team}/{artifact}/tags/list:
+    get:
+      summary: list tags
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/list-tags
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - $ref: '#/parameters/team'
+        - $ref: '#/parameters/artifact'
+      responses:
+        "200":
+          description: list of tags
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "myteam/myart"
+              tags:
+                type: array
+                items:
+                  type: string
+                  example: "1.0"
+  /v2/_catalog:
+    get:
+      summary: list/browse all repositories
+      tags:
+        - Docker Registry API v2
+      operationId: org.zalando.stups.pierone.api-v2/list-repositories
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      responses:
+        "200":
+          description: list of repos
+          schema:
+            type: object
+            properties:
+              repositories:
+                type: array
+                items:
+                  type: string
+                  example: "myteam/myart"
+
+
+  ## Docker Registry API v1
+
+  /v1/_ping:
+    get:
+      summary: check compatibility
+      description: Checks for compatibility with Docker Registry v1.
+      tags:
+          - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/ping
+      responses:
+        "200":
+          description: Docker Registry v1 is available
+          headers:
+            "X-Docker-Registry-Version":
+              type: string
+          schema:
+            type: boolean
+
+  /v1/search:
+    get:
+      summary: search repositories
+      description: Search for repositories in the registry.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/search
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: q
+          in: query
+          description: Search string to match repository names
+          type: string
+          required: false
+      responses:
+        "200":
+          description: Return list of matching repository names
+          schema:
+            type: object
+            properties:
+              num_results:
+                type: integer
+              query:
+                type: string
+              results:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+
+  ### Users
+
+  /v1/users:
+    post:
+      summary: Dummy endpoint to redirect Docker client to GET
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/post-users
+      responses:
+        "401":
+          description: Please use GET /v1/users
+    get:
+      summary: Validate login data (will be called by Docker client with basic auth)
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/login
+      security:
+        - oauth2: [uid]
+      responses:
+        "200":
+          description: Login successful
+
+  ### Tags
+
+  /v1/repositories/{team}/{artifact}/tags:
+    get:
+      summary: list tags
+      description: Lists all tags of an artifact.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-tags
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: Map of tags to image IDs
+        "404":
+          description: Repository/tags not found
+
+  /v1/repositories/{team}/{artifact}/tags/{name}:
+    get:
+      summary: get image for tag
+      description: Returns the image id for given tag
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-image-for-tag
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+        - name: name
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: Tag exists
+        "404":
+          description: Tag does not exist
+
+    put:
+      summary: store tag
+      description: Stores a tag in the registry for the given artifact.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-tag
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+        - name: name
+          in: path
+          type: string
+          required: true
+        - name: image
+          in: body
+          schema:
+            description: tag metadata
+      responses:
+        "200":
+          description: Tag was stored successfully
+        "409":
+          description: Tag already exists
+
+  /v1/repositories/{team}/{artifact}/:
+    put:
+      summary: dummy
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-repo
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: No response was specified
+          headers:
+            "X-Docker-Token":
+              type: string
+            "X-Docker-Endpoints":
+              type: string
+          schema:
+            type: string
+
+  ### Images
+
+  /v1/repositories/{team}/{artifact}/images:
+    put:
+      summary: dummy
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-images
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+      responses:
+        "204":
+          description: No response was specified
+
+    get:
+      summary: dummy
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-images
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          type: string
+          required: true
+        - name: artifact
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: No response was specified
+
+  /v1/images/{image}/json:
+    put:
+      summary: store image metadata
+      description: Stores the JSON metadata of a Docker image layer.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-image-json
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+        - name: metadata
+          in: body
+          schema:
+            description: image metadata
+            x-swagger1st-keywordize: false
+      responses:
+        "200":
+          description: Image JSON was stored successfully
+
+    get:
+      summary: read image metadata
+      description: Reads the JSON metadata of a Docker image layer.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-image-json
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: No response was specified
+        "404":
+          description: Image does not exist
+
+  /v1/images/{image}/layer:
+    put:
+      summary: store image binary
+      description: Stores the binary data of a Docker image.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-image-binary
+      security:
+        - oauth2: [uid]
+      consumes:
+        - application/octet-stream
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+        - name: data
+          in: body
+          schema:
+            description: "binary"
+      responses:
+        "200":
+          description: Image layer data was stored successfully
+
+    get:
+      summary: read image binary
+      description: Reads the binary data of a Docker image.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-image-binary
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      produces:
+        - application/octet-stream
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: Return binary layer data
+        "404":
+          description: Image layer does not exist
+
+  /v1/images/{image}/checksum:
+    put:
+      summary: check image
+      description: Checks an image with a checksum.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/put-image-checksum
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: No response was specified
+
+  /v1/images/{image}/ancestry:
+    get:
+      summary: read image ancestry
+      description: Returns the whole ancestry for an image.
+      tags:
+        - Docker Registry API v1
+      operationId: org.zalando.stups.pierone.api-v1/get-image-ancestry
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: image
+          in: path
+          type: string
+          required: true
+      responses:
+        "200":
+          description: Return list of image IDs
+          schema:
+            type: array
+            items:
+              type: string
+        "404":
+          description: Image ID does not exist
+
+  ## Pier One API
+
+  /teams:
+    get:
+      summary: list teams
+      description: lists all teams that have artifacts
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/read-teams
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      responses:
+        "200":
+          description: Return list of team IDs
+          schema:
+            type: array
+            items:
+              type: string
+
+  /teams/{team}/artifacts:
+    get:
+      summary: list artifacts
+      description: lists all artifacts of a team
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/read-artifacts
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Return list of artifact IDs
+          schema:
+            type: array
+            items:
+              type: string
+
+  /teams/{team}/artifacts/{artifact}/tags:
+    get:
+      summary: list tags
+      description: Lists all tags of an artifact sorted by time (most recently pushed tag last).
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/read-tags
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          required: true
+          type: string
+        - name: artifact
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Return list of tags
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/TagSummary"
+
+  /teams/{team}/artifacts/{artifact}/tags/{tag}/scm-source:
+    get:
+      summary: Get scm-source.json
+      description: Get artifact's SCM source information (e.g. GIT commit)
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/get-scm-source
+      security:         # remove for HTTP_ALLOW_PUBLIC_READ
+        - oauth2: [uid] # remove for HTTP_ALLOW_PUBLIC_READ
+      parameters:
+        - name: team
+          in: path
+          required: true
+          type: string
+        - name: artifact
+          in: path
+          required: true
+          type: string
+        - name: tag
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Return scm-source.json
+          schema:
+            $ref: "#/definitions/ScmSourceInformation"
+
+  /tags/{image}:
+    get:
+      summary: List tags for image
+      description: Lists tags that point to this image
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/list-tags-for-image
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: image
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Return tags
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/TagInformation"
+        "404":
+          description: Prefix does not match any image id
+        "412":
+          description: Prefix matches more than one image id
+  /stats:
+    get:
+      summary: Get usage statistics independent of teams
+      description: Get usage statistics independent of teams
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/get-overall-stats
+      security:
+        - oauth2: [uid]
+      responses:
+        "200":
+          description: Return stats
+          schema:
+            $ref: "#/definitions/OverallStatistics"
+
+  /stats/teams:
+    get:
+      summary: Get statistics for all teams
+      description: Get statistics for all teams
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/get-teams-stats
+      security:
+        - oauth2: [uid]
+      responses:
+        "200":
+          description: Return team stats
+          schema:
+            $ref: "#/definitions/TeamStatistics"
+
+  /stats/teams/{team}:
+    get:
+      summary: Get usage statistics for a team
+      description: Get usage statistics for a team
+      tags:
+        - Pier One API
+      operationId: org.zalando.stups.pierone.api/get-team-stats
+      security:
+        - oauth2: [uid]
+      parameters:
+        - name: team
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: Return team stats
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/TeamStatistic"
+
+securityDefinitions:
+  oauth2:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: https://example.com/oauth2/dialog
+    scopes:
+      uid: Unique identifier of the user accessing the service.
